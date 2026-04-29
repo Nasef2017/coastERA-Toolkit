@@ -59,49 +59,7 @@ Data Extraction: Compiles all selected variables into a cleaned .csv file with m
 
 🌊 Supported Variables (Single Levels)
 
-Wave Parameters: Significant height (
-
-H
-
-s
-
-H 
-
-s
-
-​
-
-&#x20;
-
-&#x20;Combined, Wind, Swell), Peak wave period (
-
-T
-
-p
-
-T 
-
-p
-
-​
-
-&#x20;
-
-), Mean wave periods (
-
-T
-
-m
-
-T 
-
-m
-
-​
-
-&#x20;
-
-), and Mean wave directions.
+Wave Parameters: Significant height (Combined, Wind, Swell), Peak wave period, Mean wave periods and Mean wave directions.
 
 Wind Parameters: 10m U-component, 10m V-component, Drag coefficient with waves.
 
