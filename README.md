@@ -100,7 +100,7 @@ Author: Mohamed Aly Nasef
 
 Email: Eng.m.nasef2017@gmail.com, Nasefm.aly@alexu.edu.eg
 
-Citation: 
+Citation: Nasef M.Aly. (2026). Nasef2017/coastERA-Toolkit: coastERA-Toolkit v1.0 (v1.0). Zenodo. https://doi.org/10.5281/zenodo.19884109 
 
 🤖 AI Acknowledgment
 
