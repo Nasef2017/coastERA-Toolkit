@@ -22,11 +22,6 @@ CoastERA Toolkit is a professional engineering tool designed specifically for Co
 
 The tool bridges the gap between raw meteorological NetCDF datasets and ready-to-use coastal engineering inputs (e.g., SWAN, Delft3D, MIKE), overcoming traditional challenges of data wrangling, vector derivations, and formatting.
 
-<p align="center">
-
-<img src="CoastERA\icon.png" width="60%">
-
-</p>
 
 🔬 Engineering Methodology
 
