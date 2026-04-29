@@ -1,0 +1,16 @@
+[general]
+name=CoastERA Toolkit
+qgisMinimumVersion=3.4
+description=Advanced ERA5 Data Integrator for Coastal Engineering
+version=1.0
+author=Mohamed Aly Nasef
+email=Eng.m.nasef2017@gmail.com
+about=Downloads and processes ERA5 wave and wind data for coastal engineering inputs.
+tracker=
+repository=
+category=Vector
+tags=ERA5, wave, wind, metocean, engineering
+homepage=
+icon=icon.png
+experimental=False
+deprecated=False

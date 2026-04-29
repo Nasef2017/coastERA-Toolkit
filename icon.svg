@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Background -->
+  <rect width="200" height="200" rx="40" fill="#0b1d3a" />
+  
+  <!-- Atmosphere/Data Grid Arc representing ERA5/Satellite -->
+  <path d="M 30 90 A 70 70 0 0 1 170 90" fill="none" stroke="#03a9f4" stroke-width="3" stroke-dasharray="6 6"/>
+  
+  <!-- Text ERA5 -->
+  <text x="100" y="55" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#ffffff" text-anchor="middle">ERA5</text>
+  
+  <!-- Wind Direction Arrow (Orange) representing Wind parameters -->
+  <path d="M 60 85 L 140 85 L 115 60 M 140 85 L 115 110" fill="none" stroke="#ff9800" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Coastal Waves (Cyan and Blue) representing Wave parameters -->
+  <path d="M 20 140 Q 60 100 100 140 T 180 140" fill="none" stroke="#00d2ff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M 20 165 Q 60 125 100 165 T 180 165" fill="none" stroke="#3a7bd5" stroke-width="10" stroke-linecap="round"/>
+  
+  <!-- Small nodes representing data points -->
+  <circle cx="60" cy="120" r="4" fill="#ffffff"/>
+  <circle cx="100" cy="140" r="4" fill="#ffffff"/>
+  <circle cx="140" cy="120" r="4" fill="#ffffff"/>
+</svg>

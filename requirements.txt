@@ -1,0 +1,9 @@
+numpy<2.0.0
+cdsapi
+xarray
+pandas
+matplotlib
+windrose
+tkcalendar
+netCDF4
+scipy
