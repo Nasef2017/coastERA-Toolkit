@@ -46,49 +46,7 @@ Transforms raw atmospheric variables into standard coastal engineering parameter
 
 Wind Derivation: Automatically calculates Absolute Wind Speed and Meteorological Wind Direction (True North, coming from) using 10m U and V components.
 
-Parameter Standardization: Renames complex Copernicus NetCDF variables to standard notations (
-
-H
-
-s
-
-H 
-
-s
-
-​
-
-&#x20;
-
-, 
-
-T
-
-p
-
-T 
-
-p
-
-​
-
-&#x20;
-
-, 
-
-T
-
-m
-
-T 
-
-m
-
-​
-
-&#x20;
-
-, Dir).
+Parameter Standardization: Renames complex Copernicus NetCDF variables to standard notations
 
 Phase 3: Visual Analytics \& Rose Generation
 
