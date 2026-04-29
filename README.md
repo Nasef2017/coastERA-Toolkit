@@ -24,7 +24,7 @@ The tool bridges the gap between raw meteorological NetCDF datasets and ready-to
 
 <p align="center">
 
-<img src="CoastERA\_Workflow.png" width="60%">
+<img src="CoastERA\icon.png" width="60%">
 
 </p>
 
