@@ -1212,6 +1212,8 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
         try:
             import plotly.graph_objects as go
             from plotly.subplots import make_subplots
+            import pandas as pd
+            import numpy as np
             
             # Select numerical columns to plot (exclude potential non-numeric or coordinate columns)
             coord_names = {'longitude', 'latitude', 'lon', 'lat'}
@@ -1219,26 +1221,133 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
             if not cols_to_plot:
                 return
                 
-            fig = make_subplots(rows=len(cols_to_plot), cols=1, shared_xaxes=True, vertical_spacing=0.02)
+            fig = make_subplots(rows=len(cols_to_plot), cols=1, shared_xaxes=True, vertical_spacing=0.04)
+            
+            # Prefer Scattergl for high-performance WebGL rendering with large datasets (> 2000 points)
+            scatter_cls = getattr(go, 'Scattergl', go.Scatter)
             
             for i, col in enumerate(cols_to_plot):
-                fig.add_trace(go.Scatter(
+                is_direction = '[deg]' in col.lower() or 'direction' in col.lower() or 'dir' in col.lower()
+
+                fig.add_trace(scatter_cls(
                     x=df.index, 
                     y=df[col], 
                     mode='lines',
                     name=col.split(' [')[0] if ' [' in col else col,
-                    hovertemplate='%{x}<br>%{y}'
+                    line=dict(width=1),
+                    hovertemplate='%{x|%Y-%m-%d %H:%M}<br><b>%{y:.2f}</b><extra></extra>'
                 ), row=i+1, col=1)
                 
-                # Add y-axis label
-                y_label = col.split('(')[-1].replace(')', '') if '(' in col else col
-                fig.update_yaxes(title_text=y_label, row=i+1, col=1)
+                series_valid = df[col].dropna()
+                if not series_valid.empty:
+                    if is_direction:
+                        # Calculate Dominant / Most Frequent Direction (16 compass sectors)
+                        dirs = series_valid.values
+                        sector_names = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+                        sector_idx = np.floor(((dirs + 11.25) % 360) / 22.5).astype(int)
+                        counts = np.bincount(sector_idx, minlength=16)
+                        dom_idx = int(np.argmax(counts))
+                        dom_pct = float((counts[dom_idx] / len(dirs)) * 100)
+                        dom_sector = sector_names[dom_idx]
+                        
+                        # Circular mean within the dominant sector
+                        dom_mask = sector_idx == dom_idx
+                        rads = np.radians(dirs[dom_mask])
+                        circ_mean = float((np.degrees(np.arctan2(np.mean(np.sin(rads)), np.mean(np.cos(rads))))) % 360)
+                        
+                        # Badge for Dominant Direction at the top of the subplot
+                        badge_x = df.index[int(len(df) * 0.02)] if len(df) > 0 else 0
+                        fig.add_annotation(
+                            xref=f"x{i+1}" if i > 0 else "x",
+                            yref=f"y{i+1}" if i > 0 else "y",
+                            x=badge_x,
+                            y=340,
+                            text=f"🧭 Dominant Direction: <b>{circ_mean:.1f}° ({dom_sector})</b> — {dom_pct:.1f}% frequency",
+                            showarrow=False,
+                            font=dict(color="#1B4F72", size=11),
+                            bgcolor="rgba(235, 245, 251, 0.92)",
+                            bordercolor="#2980B9",
+                            borderwidth=1.5,
+                            borderpad=4,
+                            align="left",
+                            row=i+1,
+                            col=1
+                        )
+                        
+                        # Add dashed reference line across the subplot at the dominant direction
+                        fig.add_hline(
+                            y=circ_mean, 
+                            line=dict(color="#2980B9", width=1.5, dash="dash"),
+                            annotation_text=f"Dominant: {circ_mean:.0f}° ({dom_sector})",
+                            annotation_position="top right",
+                            annotation_font=dict(color="#1B4F72", size=9),
+                            row=i+1, col=1
+                        )
+                        
+                        # Configure Y-axis explicitly with compass directions
+                        y_label = col.split('(')[-1].replace(')', '') if '(' in col else col
+                        fig.update_yaxes(
+                            title_text=y_label,
+                            range=[-10, 370],
+                            tickmode='array',
+                            tickvals=[0, 90, 180, 270, 360],
+                            ticktext=['0° (N)', '90° (E)', '180° (S)', '270° (W)', '360° (N)'],
+                            row=i+1, col=1,
+                            showgrid=True
+                        )
+                    else:
+                        # Physical scalar variable (Hs, Period, Wind Speed): show True Maximum Peak
+                        max_v = float(series_valid.max())
+                        max_t = series_valid.idxmax()
+                        y_unit = col.split('(')[-1].replace(')', '') if '(' in col else ''
+                        fig.add_annotation(
+                            x=max_t,
+                            y=max_v,
+                            text=f"Max: {max_v:.2f} {y_unit}",
+                            showarrow=True,
+                            arrowhead=2,
+                            arrowsize=1.2,
+                            arrowcolor="#E74C3C",
+                            font=dict(color="#C0392B", size=10),
+                            bgcolor="rgba(255, 255, 255, 0.9)",
+                            bordercolor="#E74C3C",
+                            borderwidth=1,
+                            ax=0,
+                            ay=-35,
+                            row=i+1,
+                            col=1
+                        )
+                        y_label = col.split('(')[-1].replace(')', '') if '(' in col else col
+                        fig.update_yaxes(title_text=y_label, row=i+1, col=1, showgrid=True)
+                else:
+                    y_label = col.split('(')[-1].replace(')', '') if '(' in col else col
+                    fig.update_yaxes(title_text=y_label, row=i+1, col=1, showgrid=True)
                 
+            # Add range selector buttons and range slider to the bottom subplot
+            fig.update_xaxes(
+                rangeslider=dict(visible=True, thickness=0.05),
+                rangeselector=dict(
+                    buttons=list([
+                        dict(count=1, label="1m", step="month", stepmode="backward"),
+                        dict(count=6, label="6m", step="month", stepmode="backward"),
+                        dict(count=1, label="1y", step="year", stepmode="backward"),
+                        dict(count=5, label="5y", step="year", stepmode="backward"),
+                        dict(step="all", label="All")
+                    ]),
+                    bgcolor="#EAEDED",
+                    activecolor="#3498DB"
+                ),
+                row=len(cols_to_plot), col=1
+            )
+            
+            fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1, spikedash="dot", spikecolor="#7F8C8D")
+            
             fig.update_layout(
                 title=f"Interactive Timeseries Data: {safe_name}",
-                height=max(400, 250 * len(cols_to_plot)),
+                height=max(450, 260 * len(cols_to_plot)),
                 hovermode="x unified",
-                showlegend=False
+                showlegend=False,
+                template="plotly_white"
             )
             
             out_path = os.path.join(save_dir, f"timeseries_{safe_name}.html")
@@ -1249,3 +1358,4 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
             feedback.pushWarning("  'plotly' library not installed. Cannot generate interactive timeseries. Run: python -m pip install plotly")
         except Exception as e:
             feedback.pushWarning(f"  Failed to plot Interactive Timeseries: {e}")
+
