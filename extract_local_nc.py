@@ -49,7 +49,7 @@ def extract_nc():
                 
         df = df[[c for c in cols_to_keep if c in df.columns]]
         df.set_index('time', inplace=True)
-        df.dropna(inplace=True)
+        df.dropna(how='all', inplace=True)
 
         if 'U10 (m/s)' in df.columns and 'V10 (m/s)' in df.columns:
             df['WindSpd (m/s)'] = np.sqrt(df['U10 (m/s)']**2 + df['V10 (m/s)']**2)

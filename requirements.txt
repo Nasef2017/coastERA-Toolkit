@@ -8,3 +8,4 @@ tkcalendar
 netCDF4
 scipy
 openpyxl
+plotly

@@ -1,200 +1,105 @@
 <table>
-
-<tr>
-
-<td>
-
-<img src="icon.svg" width="100">
-
-</td>
-
-<td>
-
-CoastERA Toolkit: Advanced MetOcean Data Integrator
-
-</td>
-
-</tr>
-
+  <tr>
+    <td><img src="icon.svg" width="100"></td>
+    <td><h1>CoastERA Toolkit: Advanced MetOcean Data Integrator</h1></td>
+  </tr>
 </table>
 
-CoastERA Toolkit is a professional engineering tool designed specifically for Coastal and Hydrodynamic modelers. It provides a seamless GUI integration with the Copernicus Climate Data Store (CDS) API to automatically extract, process, and format ERA5 hourly time-series data (1940 - Present) for offshore boundary conditions.
+**CoastERA Toolkit** is a professional engineering tool designed specifically for coastal engineers and hydrodynamic modelers. It provides a seamless native QGIS Processing integration with the Copernicus Climate Data Store (CDS) API to automatically extract, process, quality-check, and format ERA5 hourly time-series data (1940 – Present) for offshore boundary conditions.
 
-The tool bridges the gap between raw meteorological NetCDF datasets and ready-to-use coastal engineering inputs (e.g., SWAN, Delft3D, MIKE), overcoming traditional challenges of data wrangling, vector derivations, and formatting.
+The tool bridges the gap between raw meteorological NetCDF datasets and ready-to-use coastal engineering inputs (e.g., **SWAN**, **Delft3D**, **MIKE**), eliminating traditional data-wrangling hurdles, vector conversions, and formatting overhead.
 
-<p align="center">
+```mermaid
+graph LR
+    A[Point Layer / Map Canvas Click] --> B[Copernicus CDS API<br/>ERA5 Single Levels]
+    B --> C[Offshore Snapping &<br/>Land-Mask Validation]
+    C --> D[Vector Derivation<br/>Wind Speed & Direction]
+    D --> E[Interactive Plots &<br/>Rose Diagrams SVG]
+    D --> F[SWAN/Delft3D TPAR &<br/>CSV / Excel Export]
+    D --> G[QGIS Memory Layer &<br/>Temporal Controller]
+```
 
-<img src="CoastERA\\\_Workflow.png" width="60%">
+---
 
-</p>
-
-🔬 Engineering Methodology
+## 🔬 Engineering Methodology
 
 The toolkit follows a systematic 4-phase workflow tailored for coastal engineering applications:
 
-Phase 1: Automated Offshore Retrieval
+### Phase 1: Automated Offshore Retrieval & Land-Mask Check
+- **Copernicus CDS API:** Connects directly to Copernicus CDS to extract historical and near-real-time atmospheric and wave reanalysis.
+- **Offshore Snapping:** Automatically detects whether a requested coordinate falls on the ERA5 land mask (where wave variables are undefined) and snaps to the nearest offshore data node within the user-defined padding area.
+- **Temporal Resolution:** Supports 1-hour, 3-hour, 6-hour, and 12-hour sampling.
 
-Connects to the Copernicus CDS API to download massive historical archives.
+### Phase 2: Feature Engineering & Vector Conversion
+- **Wind Speed & Direction:** Calculates absolute wind speed and meteorological direction ("coming from", clockwise from True North) using the 10m $U$ and $V$ vector components:
+  $$\text{WSpd} = \sqrt{U_{10}^2 + V_{10}^2}$$
+  $$\text{WDir} = \left(270^\circ - \text{atan2}(V_{10}, U_{10})\right) \pmod{360^\circ}$$
+- **Parameter Standardization:** Automatically harmonizes Copernicus NetCDF nomenclature into standard coastal engineering notation ($H_s$, $T_p$, $T_m$, $\text{Dir}$, etc.).
 
-Spatial Targeting: Automatically finds the nearest offshore data node based on user-defined decimal coordinates and bounding box padding.
+### Phase 3: Visual Analytics & Directional Roses
+- **Directional Roses:** Generates publication-ready wave and wind roses with dynamic binning and exact legends in vector format (`.svg`).
+- **Interactive Timeseries:** Produces multi-variable synchronized interactive plots (`.html`) powered by Plotly for detailed extreme event analysis.
+- **Map Canvas Symbology:** Automatically styles points with the generated SVG roses or meteorological direction arrows.
 
-Temporal Resolution: Supports Hourly, 3-hour, 6-hour, and 12-hour resolution.
+### Phase 4: Hydrodynamic Boundary Generation
+- **Delft3D / SWAN TPAR Files:** Produces verified `.tpar` boundary condition files with standard column formatting, directional spreading ($20.0^\circ$), and automatic missing-value validation.
+- **Cleaned Data Exports:** Exports complete time-series tables to both `.csv` and `.xlsx` formats with prepended point coordinates.
+- **QGIS Temporal Controller:** Memory vector layers are fully integrated with the native QGIS Temporal Controller for interactive time-step animation.
 
-Phase 2: Feature Engineering \& Vector Conversion
+---
 
-Transforms raw atmospheric variables into standard coastal engineering parameters.
+## 🌊 Supported Variables (Single Levels)
 
-Wind Derivation: Automatically calculates Absolute Wind Speed and Meteorological Wind Direction (True North, coming from) using 10m U and V components.
+- **Wave Parameters:** Significant wave height ($H_s$ Combined, Wind-wave, Total Swell), Peak wave period ($T_p$), Mean wave period ($T_m$), and Mean wave directions.
+- **Wind Parameters:** 10m U-component ($U_{10}$), 10m V-component ($V_{10}$), Drag coefficient with waves ($C_d$).
+- **Thermodynamics & Pressure:** Sea Surface Temperature (SST), Mean Sea Level Pressure (MSLP), 2m Temperature ($T_{2m}$).
 
-Parameter Standardization: Renames complex Copernicus NetCDF variables to standard notations (
+---
 
-H
+## 📊 Automated Outputs
 
-s
+For each selected offshore point, CoastERA generates:
+- **Time-Series Data:** `wave_data_{point_label}_{lat}_{lon}.csv` and `.xlsx`
+- **Engineering Graphics:** `waverose_{point_label}_{lat}_{lon}.svg` and `windrose_{point_label}_{lat}_{lon}.svg`
+- **Interactive Graphs:** `timeseries_{point_label}_{lat}_{lon}.html`
+- **Numerical Model Boundary Files:** `boundary_{point_label}_{lat}_{lon}.tpar` (Delft3D / SWAN compatible)
+- **QGIS Vector Layer:** Memory point layer loaded into the active QGIS project, pre-labeled with max $H_s$ statistics and linked to QGIS Temporal Controller.
 
-H
+---
 
-s
+## 🛠️ Installation & Dependencies
 
-​
+### 1. Install Python Dependencies
 
-&#x20;
-
-,
-
-T
-
-p
-
-T
-
-p
-
-​
-
-&#x20;
-
-,
-
-T
-
-m
-
-T
-
-m
-
-​
-
-&#x20;
-
-, Dir).
-
-Phase 3: Visual Analytics \& Rose Generation
-
-Provides immediate graphical insights into local wave and wind climates.
-
-Directional Roses: Generates highly detailed Wave and Wind Roses highlighting intensity, frequency, and fetch directions using meteorological conventions.
-
-Time-Series Plotting: Plots dynamic temporal variations for extreme event analysis.
-
-Phase 4: Hydrodynamic Boundary Generation
-
-TPAR Files: Automatically generates ready-to-use .tpar files for direct boundary condition ingestion into Delft3D and SWAN numerical models.
-
-Data Extraction: Compiles all selected variables into a cleaned .csv file with metadata headers.
-
-🌊 Supported Variables (Single Levels)
-
-Wave Parameters: Significant height (
-
-H
-
-s
-
-H
-
-s
-
-​
-
-&#x20;
-
-&#x20;Combined, Wind, Swell), Peak wave period (
-
-T
-
-p
-
-T
-
-p
-
-​
-
-&#x20;
-
-), Mean wave periods (
-
-T
-
-m
-
-T
-
-m
-
-​
-
-&#x20;
-
-), and Mean wave directions.
-
-Wind Parameters: 10m U-component, 10m V-component, Drag coefficient with waves.
-
-Thermodynamics \& Pressure: Sea Surface Temperature (SST), Mean Sea Level Pressure (MSLP), 2m Temperature.
-
-📊 Automated Outputs
-
-Time-Series Data: wave\_data.csv
-
-Engineering Graphs: wave\_rose.png, wind\_rose.png, and wave\_wind\_timeseries.png.
-
-Model Inputs: boundary\_conditions.tpar (Delft3D / SWAN).
-
-🛠️ Installation \& Dependencies
-
-### 1\. Install Python Dependencies
-
-Open OSGeo4W Shell (as Administrator) or your local terminal and run:
+Open the **OSGeo4W Shell** (as Administrator on Windows) or your active Python environment and run:
 
 ```bash
-python -m pip install numpy cdsapi xarray pandas matplotlib windrose netCDF4 scipy openpyxl
+python -m pip install numpy cdsapi xarray pandas matplotlib plotly netCDF4 scipy openpyxl
 ```
 
-*(Alternatively, you can install the dependencies listed in `requirements.txt` using `pip install -r requirements.txt`)*
+*(Alternatively: `pip install -r requirements.txt`)*
 
-### 2\. Install QGIS Plugin
+### 2. Install the QGIS Plugin
 
-1. Open QGIS (version 3.40 or above is recommended).
+1. Open QGIS (compatible with **QGIS 3.22+** and **QGIS 4.0**).
 2. Navigate to **Settings > User Profiles > Open Active Profile Folder**.
-3. Go into `python/plugins/`.
-4. Copy this entire folder (e.g., `CoastERA`) into the `plugins` directory.
-5. Restart QGIS, open **Plugins > Manage and Install Plugins...**, find **CoastERA Toolkit** under the "Installed" tab, and check the box to enable it.
-6. Open the **Processing Toolbox** panel (Processing > Toolbox). You will find a new group called **CoastERA Toolkit** -> **MetOcean Data**.
-7. Double click **Download \& Process ERA5 Data** to launch the native interface!
+3. Open `python/plugins/`.
+4. Place the `coastERA_Toolkit` folder into the `plugins` directory.
+5. Restart QGIS, open **Plugins > Manage and Install Plugins...**, locate **CoastERA Toolkit** under the "Installed" tab, and check the box to enable it.
+6. Open the **Processing Toolbox** (Processing > Toolbox). Under **CoastERA Toolkit > MetOcean Data**, double-click **Download & Process ERA5 Data** to launch.
 
-*(Note: You must have a registered account on the Copernicus Climate Data Store and obtain an API key via the .cdsapirc file, which the GUI handles automatically).*
+> **Note on CDS API Keys:** You must have a free registered account on the Copernicus Climate Data Store and configure your credentials via `.cdsapirc` or enter your API URL and Key directly in the algorithm dialog.
 
-📧 Contact \& Citation
+---
 
-Author: Mohamed Aly Nasef
+## 📧 Contact & Citation
 
-Email: Eng.m.nasef2017@gmail.com, Nasefm.aly@alexu.edu.eg
+- **Author:** Mohamed Aly Nasef
+- **Email:** Eng.m.nasef2017@gmail.com, Nasefm.aly@alexu.edu.eg
+- **Citation:** Nasef M. Aly. (2026). *Nasef2017/coastERA-Toolkit: coastERA-Toolkit (v1.2.1)*. Zenodo. https://doi.org/10.5281/zenodo.19884109
 
-Citation: Nasef M.Aly. (2026). Nasef2017/coastERA-Toolkit: coastERA-Toolkit v1.0 (v1.0). Zenodo. https://doi.org/10.5281/zenodo.19884109
+---
 
-🤖 AI Acknowledgment
+## 🤖 AI Acknowledgment
 
-The development of the CoastERA Toolkit code, logical structure, NetCDF processing pipelines, and technical documentation were significantly enhanced and optimized using Google Gemini. The AI assisted in debugging complex Tkinter GUI workflows and ensuring best practices in data science and coastal engineering processing.
-
+The development of the CoastERA Toolkit code, QGIS Processing algorithm architecture, NetCDF processing pipelines, and technical documentation was optimized and verified using Google Gemini.

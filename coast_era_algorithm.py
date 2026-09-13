@@ -5,8 +5,26 @@ import io
 from pathlib import Path
 import traceback
 
-from qgis.PyQt.QtCore import QCoreApplication, QVariant
+from qgis.PyQt.QtCore import QCoreApplication
 from qgis.PyQt.QtGui import QIcon, QColor, QFont
+
+# Safe field and variant type resolution for Qt5 (QGIS 3) and Qt6 (QGIS 4)
+try:
+    from qgis.PyQt.QtCore import QVariant
+    FIELD_TYPE_STRING = QVariant.String
+    FIELD_TYPE_DOUBLE = QVariant.Double
+    FIELD_TYPE_INT = QVariant.Int
+except (ImportError, AttributeError):
+    try:
+        from qgis.PyQt.QtCore import QMetaType
+        FIELD_TYPE_STRING = QMetaType.Type.QString
+        FIELD_TYPE_DOUBLE = QMetaType.Type.Double
+        FIELD_TYPE_INT = QMetaType.Type.Int
+    except (ImportError, AttributeError):
+        FIELD_TYPE_STRING = 10
+        FIELD_TYPE_DOUBLE = 6
+        FIELD_TYPE_INT = 2
+
 from qgis.core import (
     QgsProcessing,
     QgsProcessingAlgorithm,
@@ -147,7 +165,7 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
     def shortHelpString(self):
         return """
         <div style="font-family: Arial, sans-serif; line-height: 1.4;">
-            <h2 style="margin-bottom: 5px; color: #2E86C1;">🌊 MetOcean Data v1.2</h2>
+            <h2 style="margin-bottom: 5px; color: #2E86C1;">🌊 MetOcean Data v1.2.1</h2>
             <p style="margin-top: 0; margin-bottom: 10px;">
                 Automated downloading, processing, and visualization of <b>Copernicus ERA5</b> metocean data.
             </p>
@@ -332,11 +350,19 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
 
         # ---- Dates -----------------------------------------------------------
         try:
-            dates = pd.date_range(start=start_date_str, end=end_date_str)
-            num_days = (pd.to_datetime(end_date_str) - pd.to_datetime(start_date_str)).days + 1
-        except Exception:
+            start_dt = pd.to_datetime(start_date_str)
+            end_dt = pd.to_datetime(end_date_str)
+            if start_dt > end_dt:
+                raise QgsProcessingException(
+                    f"Start Date ({start_date_str}) must be earlier than or equal to End Date ({end_date_str})."
+                )
+            dates = pd.date_range(start=start_dt, end=end_dt)
+            num_days = (end_dt - start_dt).days + 1
+        except QgsProcessingException:
+            raise
+        except Exception as e:
             raise QgsProcessingException(
-                f"Invalid date format. Use YYYY-MM-DD. Got: {start_date_str} to {end_date_str}"
+                f"Invalid date format. Use YYYY-MM-DD. Got: {start_date_str} to {end_date_str}. Details: {e}"
             )
 
         res_str = TIME_RESOLUTIONS[time_res_idx]
@@ -379,7 +405,7 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
         # Safely verify it actually exists before evaluating
         if not points_wgs84:
             canvas_pt_raw = parameters.get(self.CANVAS_POINT)
-            if canvas_pt_raw not in (None, '', QVariant()):
+            if canvas_pt_raw is not None and str(canvas_pt_raw).strip() not in ('', 'NULL', 'None'):
                 try:
                     canvas_pt  = self.parameterAsPoint(parameters, self.CANVAS_POINT, context)
                     canvas_crs = self.parameterAsPointCrs(parameters, self.CANVAS_POINT, context)
@@ -451,13 +477,19 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
 
             nc_file = os.path.join(save_dir, f"era5_{safe_name}.nc")
 
-            # Standard Area Parameters
+            # Standard Area Parameters with clamped coordinate bounds
+            north = min(90.0, float(lat + pad))
+            south = max(-90.0, float(lat - pad))
+            west  = max(-180.0, float(lon - pad))
+            east  = min(180.0, float(lon + pad))
+            clamped_area = [north, west, south, east]
+
             req_params = {
                 "product_type": "reanalysis",
                 "format": "netcdf",
                 "variable": variables,
                 "date": f"{start_date_str}/{end_date_str}",
-                "area": [lat + pad, lon - pad, lat - pad, lon + pad],
+                "area": clamped_area,
             }
             if len(times) < 24:
                 req_params["time"] = times
@@ -466,6 +498,18 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
             fw = _FeedbackWriter(feedback)
             sys.stdout = fw
             sys.stderr = fw
+            
+            # Fix for QGIS environment where sys.stderr is None, 
+            # causing standard library logging to throw AttributeError.
+            import logging
+            for handler in logging.getLogger().handlers:
+                if hasattr(handler, 'stream') and handler.stream is None:
+                    handler.stream = fw
+            for logger_name, logger_obj in logging.root.manager.loggerDict.items():
+                if isinstance(logger_obj, logging.Logger):
+                    for handler in logger_obj.handlers:
+                        if hasattr(handler, 'stream') and handler.stream is None:
+                            handler.stream = fw
             
             try:
                 # Pass credentials if entered in the GUI; otherwise let cdsapi auto-detect
@@ -491,7 +535,7 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
                         "variable": [wave_vars[0]],
                         "date": f"{start_date_str}/{start_date_str}",
                         "time": "12:00",
-                        "area": [lat + pad, lon - pad, lat - pad, lon + pad],
+                        "area": clamped_area,
                     }
                     try:
                         c.retrieve('reanalysis-era5-single-levels', pf_req, pf_nc)
@@ -646,13 +690,16 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
             if hs_col in df.columns and (tp_col in df.columns or tm_col in df.columns) and dir_col in df.columns:
                 period_col = tp_col if tp_col in df.columns else tm_col
                 tpar_path = os.path.join(save_dir, f"boundary_{out_safe_name}.tpar")
+                df_tpar = df.dropna(subset=[hs_col, period_col, dir_col])
+                if len(df_tpar) < len(df):
+                    feedback.pushWarning(f"  Warning: {len(df) - len(df_tpar)} timestep(s) containing NaN were omitted from TPAR.")
                 with open(tpar_path, 'w') as f:
                     f.write('TPAR\n')
-                    for ts, row in df.iterrows():
+                    for ts, row in df_tpar.iterrows():
                         t_str = ts.strftime('%Y%m%d.%H%M') if hasattr(ts, 'strftime') else str(ts)
                         f.write(
-                            f"{t_str} {row[hs_col]:.2f} {row[period_col]:.2f} "
-                            f"{row[dir_col]:.2f} 20.0\n"
+                            f"{t_str} {float(row[hs_col]):.2f} {float(row[period_col]):.2f} "
+                            f"{float(row[dir_col]):.2f} 20.0\n"
                         )
                 feedback.pushInfo(f"  Saved TPAR → {tpar_path}")
 
@@ -714,9 +761,23 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
         def _read_data(file_path):
             nonlocal actual_lat, actual_lon
             df_part = pd.DataFrame()
+            
+            import tempfile
+            import shutil
+            import os
+            
+            # Workaround for netcdf4 C-library failing on Windows with Unicode paths
+            target_path = file_path
+            temp_path = None
+            if os.name == 'nt' and not str(file_path).isascii():
+                fd, temp_path = tempfile.mkstemp(suffix='.nc')
+                os.close(fd)
+                shutil.copy2(file_path, temp_path)
+                target_path = temp_path
+
             try:
                 # Try reading as NetCDF first
-                ds = xr.open_dataset(file_path, engine='netcdf4')
+                ds = xr.open_dataset(target_path, engine='netcdf4')
                 has_lat = 'latitude' in ds.dims and ds.dims['latitude'] > 1
                 has_lon = 'longitude' in ds.dims and ds.dims['longitude'] > 1
                 if has_lat or has_lon:
@@ -748,17 +809,28 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
                     actual_lon = float(ds_pt.coords['longitude'].values)
                 
                 df_part = ds_pt.to_dataframe().reset_index()
-            except Exception:
+                ds.close()
+                
+            except Exception as e_nc:
                 # Fallback to reading as CSV (typical for ARCO timeseries endpoint)
                 try:
-                    df_part = pd.read_csv(file_path, comment='#')
+                    df_part = pd.read_csv(target_path, comment='#')
                     if 'latitude' in df_part.columns and not df_part['latitude'].isnull().all():
                         actual_lat = float(df_part['latitude'].dropna().iloc[0])
                     if 'longitude' in df_part.columns and not df_part['longitude'].isnull().all():
                         actual_lon = float(df_part['longitude'].dropna().iloc[0])
-                except Exception as e:
-                    feedback.pushWarning(f"    Failed to read file {file_path}: {e}")
+                except Exception as e_csv:
+                    feedback.pushWarning(f"    Failed to read file {file_path}")
+                    feedback.pushWarning(f"    NetCDF error: {e_nc}")
+                    feedback.pushWarning(f"    CSV error: {e_csv}")
+                    if temp_path and os.path.exists(temp_path):
+                        try: os.remove(temp_path)
+                        except: pass
                     return pd.DataFrame()
+
+            if temp_path and os.path.exists(temp_path):
+                try: os.remove(temp_path)
+                except: pass
 
             # Clean columns of trailing spaces
             df_part.columns = [str(c).strip() for c in df_part.columns]
@@ -821,9 +893,9 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
     def _build_memory_layer(self, df, lon, lat, label, feedback):
         import pandas as pd
 
-        # Build field list
+        # Build field list using cross-version compatible types
         fields = []
-        fields.append(QgsField("timestamp", QVariant.String, len=30))
+        fields.append(QgsField("timestamp", FIELD_TYPE_STRING, len=30))
 
         col_field_map = {}
         for col in df.columns:
@@ -841,11 +913,11 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
                 counter += 1
 
             if 'm/s' in col or '[m]' in col or '[s]' in col or 'cdww' in col or '[K]' in col or '[Pa]' in col:
-                fld = QgsField(safe_col, QVariant.Double, len=20, prec=4)
+                fld = QgsField(safe_col, FIELD_TYPE_DOUBLE, len=20, prec=4)
             elif '[deg]' in col:
-                fld = QgsField(safe_col, QVariant.Double, len=20, prec=2)
+                fld = QgsField(safe_col, FIELD_TYPE_DOUBLE, len=20, prec=2)
             else:
-                fld = QgsField(safe_col, QVariant.Double, len=20, prec=4)
+                fld = QgsField(safe_col, FIELD_TYPE_DOUBLE, len=20, prec=4)
             fields.append(fld)
             col_field_map[col] = safe_col
 
@@ -876,6 +948,20 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
 
         provider.addFeatures(feats)
         layer.updateExtents()
+
+        # Configure QGIS Temporal Controller support if available
+        try:
+            from qgis.core import QgsVectorLayerTemporalProperties
+            tprops = layer.temporalProperties()
+            if tprops:
+                mode = getattr(Qgis.VectorTemporalMode, 'FeatureDateTimeInstantFromField', None)
+                if mode is None:
+                    mode = getattr(QgsVectorLayerTemporalProperties, 'ModeFeatureDateTimeInstantFromField', 0)
+                tprops.setMode(mode)
+                tprops.setStartField("timestamp")
+                tprops.setIsActive(True)
+        except Exception:
+            pass
         
         wave_fld = col_field_map.get('mean_wave_direction [deg] (mwd)')
         wind_fld = col_field_map.get('wind_direction [deg] (wdir)')
@@ -931,7 +1017,13 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
         txt_fmt.setBuffer(buf)
 
         lyr_settings.setFormat(txt_fmt)
-        lyr_settings.placement = Qgis.LabelPlacement.OverPoint
+        try:
+            lyr_settings.placement = Qgis.LabelPlacement.OverPoint
+        except AttributeError:
+            try:
+                lyr_settings.placement = QgsPalLayerSettings.OverPoint
+            except AttributeError:
+                pass
 
         labeling = QgsVectorLayerSimpleLabeling(lyr_settings)
         layer.setLabeling(labeling)
@@ -987,7 +1079,10 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
                 symbol.appendSymbolLayer(wave_layer.clone())
 
         if symbol.symbolLayerCount() > 0:
-            renderer = QgsSingleSymbolRenderer(symbol)
+            root_rule = QgsRuleBasedRenderer.Rule(None)
+            rule = QgsRuleBasedRenderer.Rule(symbol, 0, 0, filterExp="$id = 1", label="Initial Direction")
+            root_rule.appendChild(rule)
+            renderer = QgsRuleBasedRenderer(root_rule)
             layer.setRenderer(renderer)
             layer.triggerRepaint()
             
@@ -1041,14 +1136,15 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
             # -------------------------------------------------------------
             # EXACT DYNAMIC BINNING ALGORITHM
             # -------------------------------------------------------------
-            max_val = np.max(val)
-            if max_val <= 0:
-                max_val = 1.0  # Prevent division by zero
+            max_val = float(np.max(val))
+            min_val = max(0.0, float(np.min(val)))
+            if max_val <= min_val:
+                max_val = min_val + 1.0  # Prevent division by zero
                 
             num_bins = 5 # Number of color categories
-            step = max_val / num_bins
+            step = (max_val - min_val) / num_bins
             
-            bins = [0]
+            bins = [min_val]
             labels = []
             
             for i in range(num_bins):
@@ -1117,8 +1213,9 @@ class CoastERADownloadAlgorithm(QgsProcessingAlgorithm):
             import plotly.graph_objects as go
             from plotly.subplots import make_subplots
             
-            # Select numerical columns to plot (exclude potential non-numeric or unwanted columns)
-            cols_to_plot = [c for c in df.select_dtypes(include=['number']).columns if c not in ['longitude', 'latitude']]
+            # Select numerical columns to plot (exclude potential non-numeric or coordinate columns)
+            coord_names = {'longitude', 'latitude', 'lon', 'lat'}
+            cols_to_plot = [c for c in df.select_dtypes(include=['number']).columns if c.strip().lower() not in coord_names]
             if not cols_to_plot:
                 return
                 
